@@ -1,10 +1,10 @@
 import streamlit as st
 import pandas as pd
 import joblib
-import plotly.graph_objects as go  # Changed from plotly.express
+import plotly.graph_objects as go  
 from datetime import datetime
 
-# --- SETTINGS ---
+# --- Settings ---
 st.set_page_config(
     page_title="AirSage Pro",
     page_icon="🌫️",
@@ -12,7 +12,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- MODEL LOAD ---
+# --- Model Load ---
 @st.cache_resource
 def load_model():
     model = joblib.load('models/air_quality_model.pkl')
@@ -27,7 +27,7 @@ def load_model():
 
 model = load_model()
 
-# --- GAUGE CHART FUNCTION ---
+# --- Gauge Chart Function ---
 def create_gauge(value, min_val=0, max_val=15, threshold=9.4):
     fig = go.Figure(go.Indicator(
         mode="gauge+number",
@@ -50,7 +50,7 @@ def create_gauge(value, min_val=0, max_val=15, threshold=9.4):
     fig.update_layout(margin=dict(t=0, b=0))
     return fig
 
-# --- SIDEBAR ---
+# --- Sidebar ---
 with st.sidebar:
     st.title("Configuration")
     st.markdown("---")
@@ -60,7 +60,7 @@ with st.sidebar:
     {", ".join(st.session_state['expected_features'])}
     """)
 
-# --- MAIN INTERFACE ---
+# --- Main Interface ---
 st.title("🌫️ AirSage Pro")
 st.caption("Industrial-Grade Air Quality Monitoring System")
 
