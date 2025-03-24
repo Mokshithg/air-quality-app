@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import joblib
-import plotly.graph_objects as go  
+import plotly.graph_objects as go
 from datetime import datetime
 
 # --- Settings ---
@@ -12,20 +12,26 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# --- Constants ---
+DEFAULT_FEATURES = [
+    'PT08.S1(CO)', 'NMHC(GT)', 'NOx(GT)', 'NO2(GT)',
+    'PT08.S3(NOx)', 'T', 'RH', 'AH', 'Hour', 'Month', 'DayOfWeek'
+]
+
 # --- Model Load ---
 @st.cache_resource
 def load_model():
-    model = joblib.load('models/air_quality_model.pkl')
-    if hasattr(model, 'feature_names_in_'):
-        st.session_state['expected_features'] = list(model.feature_names_in_)
-    else:
-        st.session_state['expected_features'] = [
-            'PT08.S1(CO)', 'NMHC(GT)', 'NOx(GT)', 'NO2(GT)', 
-            'PT08.S3(NOx)', 'T', 'RH', 'AH', 'Hour', 'Month', 'DayOfWeek'
-        ]
-    return model
+    try:
+        model = joblib.load('models/air_quality_model.pkl')
+        return model
+    except Exception as e:
+        st.error(f"Model loading failed: {str(e)}")
+        return None
 
 model = load_model()
+
+# Get feature names (fallback to defaults if model doesn't have them)
+features = getattr(model, 'feature_names_in_', DEFAULT_FEATURES) if model else DEFAULT_FEATURES
 
 # --- Gauge Chart Function ---
 def create_gauge(value, min_val=0, max_val=15, threshold=9.4):
@@ -57,7 +63,7 @@ with st.sidebar:
     alert_threshold = st.slider("Alert Threshold (mg/m³)", 4.4, 15.0, 9.4)
     st.markdown(f"""
     ### Expected Features:
-    {", ".join(st.session_state['expected_features'])}
+    {", ".join(features)}
     """)
 
 # --- Main Interface ---
@@ -92,53 +98,57 @@ with tab1:
             day_of_week = st.selectbox('Day of Week', range(7), 0)
 
     if st.button("Run Analysis", type="primary", use_container_width=True):
-        input_data = {
-            'PT08.S1(CO)': [pt08_s1_co],
-            'NMHC(GT)': [nmhc_gt],
-            'NOx(GT)': [nox_gt],
-            'NO2(GT)': [no2_gt],
-            'PT08.S3(NOx)': [pt08_s3_nox],
-            'T': [temperature],
-            'RH': [humidity],
-            'AH': [abs_humidity],
-            'Hour': [hour],
-            'Month': [month],
-            'DayOfWeek': [day_of_week]
-        }
-        
-        input_df = pd.DataFrame(input_data)[st.session_state['expected_features']]
-        
-        try:
-            prediction = model.predict(input_df)[0]
+        if model is None:
+            st.error("Model not loaded - cannot make predictions")
+        else:
+            input_data = {
+                'PT08.S1(CO)': [pt08_s1_co],
+                'NMHC(GT)': [nmhc_gt],
+                'NOx(GT)': [nox_gt],
+                'NO2(GT)': [no2_gt],
+                'PT08.S3(NOx)': [pt08_s3_nox],
+                'T': [temperature],
+                'RH': [humidity],
+                'AH': [abs_humidity],
+                'Hour': [hour],
+                'Month': [month],
+                'DayOfWeek': [day_of_week]
+            }
             
-            with st.container():
-                st.markdown("---")
-                col1, col2, col3 = st.columns([1,3,1])
+            # Ensure we only use features the model expects
+            input_df = pd.DataFrame(input_data)[features]
+            
+            try:
+                prediction = model.predict(input_df)[0]
                 
-                with col2:
-                    st.plotly_chart(
-                        create_gauge(prediction, threshold=alert_threshold), 
-                        use_container_width=True
-                    )
+                with st.container():
+                    st.markdown("---")
+                    col1, col2, col3 = st.columns([1,3,1])
                     
-                    if prediction > alert_threshold:
-                        st.error("🚨 Critical Alert: Evacuation recommended!")
-                        st.snow()
-                    elif prediction > 4.4:
-                        st.warning("⚠️ Caution: Sensitive groups should reduce exposure")
-                    else:
-                        st.success("✅ Air Quality Normal")
-                        st.balloons()
-                    
-                    st.metric("Predicted CO Concentration", f"{prediction:.2f} mg/m³", 
-                             delta_color="inverse")
+                    with col2:
+                        st.plotly_chart(
+                            create_gauge(prediction, threshold=alert_threshold), 
+                            use_container_width=True
+                        )
                         
-        except Exception as e:
-            st.error(f"Prediction failed: {str(e)}")
-            with st.expander("Debug Details"):
-                st.write("Input Features:", input_df.columns.tolist())
-                st.write("Input Values:", input_df.values.tolist())
-                st.write("Model Features:", st.session_state['expected_features'])
+                        if prediction > alert_threshold:
+                            st.error("🚨 Critical Alert: Evacuation recommended!")
+                            st.snow()
+                        elif prediction > 4.4:
+                            st.warning("⚠️ Caution: Sensitive groups should reduce exposure")
+                        else:
+                            st.success("✅ Air Quality Normal")
+                            st.balloons()
+                        
+                        st.metric("Predicted CO Concentration", f"{prediction:.2f} mg/m³", 
+                                delta_color="inverse")
+                            
+            except Exception as e:
+                st.error(f"Prediction failed: {str(e)}")
+                with st.expander("Debug Details"):
+                    st.write("Input Features:", input_df.columns.tolist())
+                    st.write("Input Values:", input_df.values.tolist())
+                    st.write("Model Features:", features)
 
 with tab2:
     st.subheader("Technical Documentation")
@@ -154,4 +164,4 @@ with tab2:
     | Safe        | < 4.4      | Normal conditions |
     | Moderate    | 4.4-9.4    | Sensitive groups affected |
     | Hazardous   | > 9.4      | Health warnings issued |
-    """.format(", ".join(st.session_state['expected_features'])))
+    """.format(", ".join(features)))
